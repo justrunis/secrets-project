@@ -7,13 +7,14 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from 'passport-local';
 import pkg from 'pg';
 const { Pool } = pkg;
- 
+import 'dotenv/config'
+
 // Create a PostgreSQL pool for database connections
 const dbPool = new Pool({
-    user: "postgres",
-    host: "localhost",
-    database: "Secrets",
-    password: "dbpassword123",
+    user: process.env.USER,
+    host: process.env.HOST,
+    database: process.env.DATABASE,
+    password: process.env.PASSWORD,
     port: 5432,
 });
  
@@ -39,7 +40,7 @@ app.use(express.static("public"));
 // Configure session handling using express-session
 app.use(
     session({
-        secret: "MYSECRET", // Secret used to sign the session ID cookie
+        secret: process.env.PASSPORT_SECRET, // Secret used to sign the session ID cookie
         resave: false, // Do not save session if unmodified
         saveUninitialized: false, // Do not create a session until something is stored
         cookie: {
@@ -174,14 +175,33 @@ app.post("/register", passport.authenticate("local-register", {
 }));
  
 // Secrets page route
-app.get('/secrets', (req, res) => {
+app.get('/secrets', async (req, res) => {
+    try {
+        // Query the database to get all users with a non-null secret field
+        const response = await query('SELECT * FROM users WHERE secret IS NOT NULL');
+        const users = response.rows;
+        res.render('secrets.ejs', { users: users });
+    } catch (error) {
+        res.status(500).send('Error retrieving users');
+    }
+});
+
+app.get("/submit", (req, res) => {
     // Check if the user is authenticated
     if (req.isAuthenticated()) {
-        res.render('secrets.ejs');
+        res.render('submit.ejs');
     } else {
         // Redirect to login page if user is not authenticated
         res.redirect('/login');
     }
+});
+
+// Submit secret route
+app.post("/submit", (req, res) => {
+    const submittedSecret = req.body.secret;
+    const user_id = req.user.id;
+    query("UPDATE users SET secret = $1 WHERE id = $2", [submittedSecret, user_id]);
+    res.redirect("/secrets");
 });
  
 // Logout route
